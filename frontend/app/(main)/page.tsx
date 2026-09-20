@@ -15,8 +15,7 @@ import { TagFilterBar } from '@/components/notes/TagFilterBar';
 import { PaginationControls } from '@/components/notes/PaginationControls';
 import toast from 'react-hot-toast';
 
-export default function Home() {
-
+function HomeContent() {
   const { getParam } = useQueryParams();
   const { isAuthenticated, isInitialized } = useAuthStore();
   const { notes, isLoading, setModalOpen, setNoteToEdit, fetchNotes } = useNotesStore();
@@ -95,5 +94,13 @@ export default function Home() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <React.Suspense fallback={<LoadingSpinner text="Loading CloudNotes..." />}>
+      <HomeContent />
+    </React.Suspense>
   );
 }
