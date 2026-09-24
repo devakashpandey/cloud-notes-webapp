@@ -35,7 +35,7 @@ export const updateUserDetails = asyncHandler(async (req, res) => {
 
 export const updateUserAvatar = asyncHandler(async (req, res) => {
     const userId = req.user?._id;
-    const avatarLocalPath = req.file?.path;
+    const avatarLocalPath = req.file?.buffer;
 
     if (!avatarLocalPath) {
         throw new ApiError(400, "Avatar file is required");

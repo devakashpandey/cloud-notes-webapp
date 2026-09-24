@@ -45,7 +45,7 @@ export const registerUser = asyncHandler(async (req, res) => {
     let avatarPublicId = "";
 
     if (req.file) {
-        const avatar = await uploadOnCloudinary(req.file.path, "avatars");
+        const avatar = await uploadOnCloudinary(req.file.buffer, "avatars");
         if (avatar) {
             avatarUrl = avatar.secure_url;
             avatarPublicId = avatar.public_id;

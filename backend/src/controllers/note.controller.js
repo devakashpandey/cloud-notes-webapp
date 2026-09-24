@@ -51,10 +51,10 @@ export const createNewNote = asyncHandler(async (req, res) => {
     // if (!title) {
     //     throw new ApiError(400, "Title is required");
     // }
-    const localFilePath = req.file?.path;
+    const fileBuffer = req.file?.buffer;
     let uploadedFile = null;
-    if (localFilePath) {
-        uploadedFile = await uploadOnCloudinary(localFilePath);
+    if (fileBuffer) {
+        uploadedFile = await uploadOnCloudinary(fileBuffer);
     }
     const note = await Note.create({
         title,
@@ -288,7 +288,7 @@ export const updateNote = asyncHandler(async (req, res) => {
     if (tags !== undefined) note.tags = parseTags(tags);
 
     if (req.file) {
-        const image = await uploadOnCloudinary(req.file.path);
+        const image = await uploadOnCloudinary(req.file.buffer);
         if (image) {
             if (note.imagePublicId) {
                 await deleteFromCloudinary(note.imagePublicId);
