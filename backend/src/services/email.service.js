@@ -12,12 +12,20 @@ import nodemailer from "nodemailer";
 // });
 
 // 
+
+
+// 1. Transporter create karein (Port 587 - Render compatible)
 const transporter = nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: Number(process.env.SMTP_PORT) === 465, // Port 587 ke liye false hota hai (STARTTLS)
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, "") : "",
     },
+    tls: {
+        rejectUnauthorized: false
+    }
 });
 
 

@@ -11,6 +11,9 @@ import { globalLimiter } from "./middleware/rateLimiter.middleware.js";
 
 export const app = express();
 
+// Render / Proxy ke liye (Rate limiter error fix)
+app.set("trust proxy", 1);
+
 // 1. Helmet security always on top
 app.use(helmet())
 
