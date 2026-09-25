@@ -1,21 +1,31 @@
 import nodemailer from "nodemailer";
 
 // 1. Transporter create karein
+// const transporter = nodemailer.createTransport({
+//     host: process.env.SMTP_HOST || "sandbox.smtp.mailtrap.io",
+//     port: Number(process.env.SMTP_PORT) || 2525,
+//     secure: Number(process.env.SMTP_PORT) === 465,
+//     auth: {
+//         user: process.env.SMTP_USER,
+//         pass: process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, "") : "",
+//     },
+// });
+
+// 
 const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || "sandbox.smtp.mailtrap.io",
-    port: Number(process.env.SMTP_PORT) || 2525,
-    secure: Number(process.env.SMTP_PORT) === 465,
+    service: "gmail",
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, "") : "",
     },
 });
 
+
 // 2. Generic send email function
 export const sendEmail = async ({ to, subject, html }) => {
     try {
         const mailOptions = {
-            from: `"${process.env.SMTP_FROM_NAME || 'Note App'}" <${process.env.SMTP_FROM_EMAIL || 'no-reply@yourapp.com'}>`,
+            from: `"CloudNotes" <${process.env.SMTP_USER}>`,
             to,
             subject,
             html,
