@@ -64,11 +64,15 @@ export const registerUser = asyncHandler(async (req, res) => {
     await newUser.save();
 
     // email bhejo
-    try {
-        await sendVerificationEmail(newUser.email, newUser.username, verificationToken);
-    } catch (err) {
-        console.log(err)
-    }
+    // try {
+    //     await sendVerificationEmail(newUser.email, newUser.username, verificationToken);
+    // } catch (err) {
+    //     console.log(err)
+    // }
+
+    sendVerificationEmail(newUser.email, newUser.username, verificationToken)
+        .then(() => console.log(`Verification email sent to: ${newUser.email}`))
+        .catch((err) => console.error("Failed to send verification email:", err));
 
     const createdUser = await User.findById(newUser._id).select(
         "-password -emailVerificationToken -emailVerificationExpiry -refreshToken"
@@ -233,12 +237,9 @@ export const verifyEmail = asyncHandler(async (req, res) => {
     await user.save({ validateBeforeSave: false });
 
     // add welcome email logic here
-
-    try {
-        await sendWelcomeEmail(user.email, user.username);
-    } catch (err) {
-        console.log(err)
-    }
+    sendWelcomeEmail(user.email, user.username)
+        .then(() => console.log(`Welcome email sent to: ${user.email}`))
+        .catch((err) => console.error("Failed to send welcome email:", err));
 
     return res.status(200).json(
         new ApiResponse(200, {}, "Email verified successfully! You can now log in.")
