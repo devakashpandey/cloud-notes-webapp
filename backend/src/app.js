@@ -34,7 +34,12 @@ app.use(cookieParser()); // cookies ko handle karne ke liye
 // 4. Global API Rate Limiter (Routes se theek pehle)
 app.use("/api/v1", globalLimiter);
 
-// 5. routes declaration
+// 5. Health check endpoint (cron-job ke liye - lightweight ping)
+app.get("/health", (req, res) => {
+    res.status(200).json({ status: "ok" });
+});
+
+// 6. routes declaration
 app.use("/api/v1", mainRouter);
 
 // 6. Global error handler middleware - always at last
