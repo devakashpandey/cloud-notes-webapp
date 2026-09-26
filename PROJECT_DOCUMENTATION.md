@@ -28,7 +28,7 @@
    - [Phase 5: Query Engine (Search, Filter, Sort, Pagination)](#phase-5-query-engine-search-filter-sort-pagination)
    - [Phase 6: In-Memory Caching Architecture (Redis / Upstash)](#phase-6-in-memory-caching-architecture-redis--upstash)
    - [Phase 7: Real-Time Synchronization Engine (Socket.IO)](#phase-7-real-time-synchronization-engine-socketio)
-   - [Phase 8: Transactional Email Infrastructure (Nodemailer)](#phase-8-transactional-email-infrastructure-nodemailer)
+   - [Phase 8: Transactional Email Infrastructure (Brevo HTTP API)](#phase-8-transactional-email-infrastructure-brevo-http-api)
    - [Phase 9: Security Hardening & Global Error Handling](#phase-9-security-hardening--global-error-handling)
 7. [Frontend — Engineering From Scratch](#-frontend--engineering-from-scratch)
    - [Phase 1: Next.js 16 App Router & Route Groups](#phase-1-nextjs-16-app-router--route-groups)
@@ -80,7 +80,7 @@ Every single library in this project was selected for a specific architectural p
 │ bcryptjs             │ Salted Password Hashing   │ backend/src/models/user.model.js│ Pre-save Hooks    │
 │ multer               │ Multipart/form-data upload│ backend/src/middleware/multer*  │ Disk Storage      │
 │ cloudinary           │ Cloud Media Storage       │ backend/src/services/cloudinary*│ Upload & Optimize │
-│ nodemailer           │ Transactional Email SMTP  │ backend/src/services/email*     │ HTML Email Sending│
+│ Brevo HTTP API       │ Transactional Email (REST)│ backend/src/services/email*     │ fetch() API calls │
 │ zod                  │ Schema Request Validation │ backend/src/validators/*        │ Request Middleware│
 │ helmet               │ HTTP Security Headers     │ backend/src/app.js              │ App-level Header  │
 │ cors                 │ Cross-Origin Whitelisting │ backend/src/app.js              │ Credentials CORS  │
@@ -150,10 +150,18 @@ Every single library in this project was selected for a specific architectural p
   - `uploadOnCloudinary(localFilePath)`: Uploads local disk files to Cloudinary bucket, returns secure URL and `public_id`, and safely deletes the temporary local file via `fs.unlinkSync()`.
   - `deleteFromCloudinary(publicId)`: Invoked during note/avatar deletion to remove obsolete cloud media.
 
-#### 9. `nodemailer`
-- **Why**: Node.js email sending module with zero dependencies for delivering transactional emails via SMTP.
+#### 9. Brevo HTTP API (Transactional Email)
+- **Why**: Cloud hosting platforms like Render block outbound SMTP ports (587/465), causing `ETIMEDOUT` connection errors when using Nodemailer with Gmail SMTP or Brevo SMTP. The Brevo HTTP API sends emails over HTTPS (port 443), which is never blocked by any hosting provider.
 - **Where**: `backend/src/services/email.service.js`.
-- **How Implemented**: Configured with Gmail SMTP transport using Google App Passwords. Provides async functions to dispatch formatted HTML emails for account verification, password resets, and welcome onboarding.
+- **How Implemented**: Uses Node.js native `fetch()` to call Brevo's REST API (`https://api.brevo.com/v3/smtp/email`) with an API key for authentication. Provides async functions to dispatch formatted HTML emails for account verification, password resets, and welcome onboarding.
+- **Migration Journey**: Initially used `nodemailer` + Gmail SMTP → Gmail blocked on cloud IPs → Switched to Brevo SMTP → Render blocked SMTP ports (Connection timeout / `ETIMEDOUT`) → Final solution: Brevo HTTP API over HTTPS.
+
+  ```
+  Evolution of Email Service:
+  ❌ Nodemailer + Gmail SMTP    → Gmail blocks cloud server IPs
+  ❌ Nodemailer + Brevo SMTP    → Render blocks SMTP ports (587/465) → ETIMEDOUT
+  ✅ Brevo HTTP API (fetch)     → Works on all platforms (uses HTTPS port 443)
+  ```
 
 #### 10. `zod`
 - **Why**: TypeScript-first schema declaration and validation library for validating incoming request payloads at the boundary.
@@ -531,7 +539,7 @@ full-stack-project/
 │       ├── services/
 │       │   ├── auth.service.js          # Token generator helper
 │       │   ├── cloudinary.service.js    # Cloudinary upload and destroy utilities
-│       │   ├── email.service.js         # Nodemailer HTML email dispatcher
+│       │   ├── email.service.js         # Brevo HTTP API email dispatcher (previously Nodemailer)
 │       │   └── redisCache.service.js    # Cache-aside helper (get, set, invalidate)
 │       ├── validators/
 │       │   ├── auth.validators.js       # Auth request Zod schemas
@@ -691,10 +699,20 @@ The `getNotes` controller handles dynamic querying:
 
 ---
 
-### Phase 8: Transactional Email Infrastructure (Nodemailer)
+### Phase 8: Transactional Email Infrastructure (Brevo HTTP API)
 - **Email Verification**: Sends a 24-hour verification token to verify ownership upon registration.
 - **Password Reset**: Dispatches a 15-minute cryptographically secure reset link.
 - **Welcome Email**: Automatically sent once email verification succeeds.
+- **Why Brevo HTTP API (not SMTP)?**: Cloud platforms like Render block outbound SMTP ports (587/465). Using Brevo's REST API over HTTPS (port 443) bypasses this restriction entirely.
+- **Architecture**:
+  ```
+  auth.controller.js → sendVerificationEmail() → sendEmail()
+                                                     ↓
+                                              fetch('https://api.brevo.com/v3/smtp/email')
+                                                     ↓ (HTTPS - Port 443, never blocked)
+                                              Brevo delivers email to user's inbox
+  ```
+- **Key Requirement**: Sender email must be verified in Brevo Dashboard (Settings → Senders, domains, IPs). Brevo also requires one-time IP authorization when API is first called from a new server IP.
 
 ---
 
@@ -866,12 +884,9 @@ CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
 
-# SMTP Email Configuration
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=465
-SMTP_USER=your_email@gmail.com
-SMTP_PASS=your_16_digit_app_password
-SMTP_FROM_EMAIL=your_email@gmail.com
+# Brevo Email Configuration (HTTP API — SMTP ports blocked on Render)
+BREVO_API_KEY=xkeysib-your_brevo_api_key_here
+SMTP_FROM_EMAIL=your_verified_sender_email@gmail.com
 SMTP_FROM_NAME=CloudNotes
 
 # Upstash Redis
@@ -895,7 +910,7 @@ NEXT_PUBLIC_SOCKET_URL=http://localhost:8000
 - **Node.js**: v18.0.0 or higher
 - **MongoDB Atlas** database instance (or local MongoDB)
 - **Cloudinary** account credentials
-- **Gmail App Password** for sending emails
+- **Brevo** account with verified sender email and API key (free tier: 300 emails/day)
 - **Upstash Redis** database instance (or local Redis)
 
 ### 1. Clone Repository
@@ -968,7 +983,7 @@ Deploying a modern full-stack application with **WebSockets, Redis caching, and 
 | **Database** | **MongoDB Atlas** | Fully managed MongoDB cluster in cloud with automated backups | ✅ Yes (M0 Free Tier) |
 | **Cache** | **Upstash Redis** | Serverless/Managed Redis with low latency and TLS support | ✅ Yes (10k requests/day) |
 | **Media CDN** | **Cloudinary** | Global image transformation and CDN delivery | ✅ Yes (Free tier) |
-| **Email** | **Gmail SMTP** or **Resend** | Reliable transactional email delivery | ✅ Yes |
+| **Email** | **Brevo HTTP API** | Reliable transactional email delivery via HTTPS (SMTP blocked on Render) | ✅ Yes (300/day free) |
 
 ---
 
@@ -984,9 +999,11 @@ Deploying a modern full-stack application with **WebSockets, Redis caching, and 
    - Copy the `REDIS_URL` connection string (starts with `rediss://...`).
 3. **Cloudinary**:
    - Note down `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`.
-4. **Gmail SMTP**:
-   - Enable 2-Step Verification on your Google account.
-   - Generate a **16-digit App Password** under Security settings.
+4. **Brevo (Email Service)**:
+   - Sign up at [brevo.com](https://brevo.com) (free — 300 emails/day).
+   - Go to **Settings → Senders, domains, IPs** → Add and verify your sender email address.
+   - Go to **Settings → SMTP & API → API keys & MCP** tab → Generate an API key (starts with `xkeysib-`).
+   - **Important**: On first API call from a new server IP, Brevo sends a verification email to authorize the IP. Click "Yes, authorize" — this is a one-time step.
 
 ---
 
@@ -1013,11 +1030,8 @@ Deploying a modern full-stack application with **WebSockets, Redis caching, and 
    CLOUDINARY_CLOUD_NAME=your_cloudinary_name
    CLOUDINARY_API_KEY=your_cloudinary_key
    CLOUDINARY_API_SECRET=your_cloudinary_secret
-   SMTP_HOST=smtp.gmail.com
-   SMTP_PORT=465
-   SMTP_USER=your_email@gmail.com
-   SMTP_PASS=your_16_digit_app_password
-   SMTP_FROM_EMAIL=your_email@gmail.com
+   BREVO_API_KEY=xkeysib-your_brevo_api_key_here
+   SMTP_FROM_EMAIL=your_verified_sender@gmail.com
    SMTP_FROM_NAME=CloudNotes
    REDIS_URL=rediss://default:your_redis_key@your_host.upstash.io:6379
    CLIENT_URL=https://cloudnotes-frontend.vercel.app
@@ -1087,9 +1101,15 @@ When running a decoupled full-stack app across two different cloud domains (e.g.
 #### 3. ⏰ Render Free-Tier Keep-Alive (Spin-down Prevention)
 - Render's free tier spins down (sleeps) after 15 minutes of inactivity, causing a 30-50 second cold start delay.
 - **Solution**: Set up a free ping monitor (e.g., [UptimeRobot](https://uptimerobot.com) or [cron-job.org](https://cron-job.org)) to ping your backend health route every 10 minutes:
-  `GET https://cloudnotes-backend.onrender.com/api/v1/health`
+  `GET https://cloudnotes-backend.onrender.com/health`
+- **Health Endpoint**: A lightweight `/health` endpoint returning `{"status":"ok"}` was added in `app.js` specifically for keep-alive pings (avoids large HTML responses that cause cron-job "output too large" errors).
 
-#### 4. 🖼️ Next.js Image Optimization Domain Whitelisting
+#### 4. 📧 SMTP Port Blocking on Cloud Platforms
+- **Problem**: Render (and most free-tier cloud platforms) block outbound SMTP connections on ports 587 and 465 to prevent spam. This causes `ETIMEDOUT` errors when using Nodemailer with any SMTP provider (Gmail, Brevo, SendGrid, etc.).
+- **Solution**: Use email provider's **HTTP/REST API** instead of SMTP. Brevo's API (`https://api.brevo.com/v3/smtp/email`) sends emails over HTTPS (port 443), which is never blocked.
+- **One-Time IP Authorization**: When Brevo detects an API call from a new server IP, it sends a security email asking you to authorize the IP. This is a one-time step per server.
+
+#### 5. 🖼️ Next.js Image Optimization Domain Whitelisting
 - When images are loaded from Cloudinary CDN on Next.js, configure `next.config.ts`:
   ```typescript
   // frontend/next.config.ts
@@ -1190,10 +1210,19 @@ Building this application from scratch provided deep, hands-on mastery over prod
   - Tiered rate limiting: 200 requests/15m globally, restricted to 20 requests/15m on sensitive auth routes (`/register`, `/login`, `/forgot-password`).
   - Password hashing with bcrypt using 10 salt rounds and pre-save model hooks.
 
-#### 10. Cryptographic Token Generation & Email Delivery (Nodemailer)
-- **What We Learned**: Sensitive tokens (email verification, password resets) should never be stored in plain text in the database.
-- **What We Used**: Node's native `crypto.randomBytes`, SHA-256 hashing, `nodemailer` with Gmail SMTP.
+#### 10. Cryptographic Token Generation & Email Delivery (Brevo HTTP API)
+- **What We Learned**: Sensitive tokens (email verification, password resets) should never be stored in plain text in the database. Additionally, cloud platforms block SMTP ports — making traditional Nodemailer + SMTP setups unusable in production.
+- **What We Used**: Node's native `crypto.randomBytes`, SHA-256 hashing, Brevo HTTP API via `fetch()`.
 - **Implementation Strategy**: Generate an unhashed token for the email link, hash it with SHA-256 before saving to MongoDB, and verify matching hashes upon receipt.
+- **Email Delivery Evolution & Debugging Journey**:
+  1. **Attempt 1 — Nodemailer + Gmail SMTP**: Gmail blocks connections from cloud server IPs (Render, AWS, etc.) to prevent spam. Emails silently failed with no error logs.
+  2. **Attempt 2 — Nodemailer + Brevo SMTP**: Brevo SMTP worked locally, but Render's free tier blocks outbound connections on ports 587/465. Error: `ETIMEDOUT`, code: `CONN`.
+  3. **Final Solution — Brevo HTTP API**: Switched to Brevo's REST API (`https://api.brevo.com/v3/smtp/email`) using native `fetch()`. HTTPS uses port 443 which is never blocked by any hosting provider.
+- **Key Dev Terms Learned**:
+  - **Nodemailer** = Email Client Library (npm package — the "vehicle")
+  - **Gmail SMTP / Brevo / SendGrid / Resend** = Email Service Provider / ESP (the "fuel")
+  - **SMTP** = Simple Mail Transfer Protocol (port 587/465) — blocked on many cloud platforms
+  - **HTTP API** = REST-based email sending over HTTPS (port 443) — universally supported
 
 ---
 
