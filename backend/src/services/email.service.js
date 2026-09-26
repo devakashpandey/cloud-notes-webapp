@@ -15,18 +15,33 @@ import nodemailer from "nodemailer";
 
 
 // 1. Transporter create karein (Brevo / SMTP compatible)
+const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
+const smtpPort = Number(process.env.SMTP_PORT) || 587;
+const smtpUser = process.env.SMTP_USER;
+const smtpPass = process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, "") : "";
+
+console.log(`📧 [SMTP Config] Host: ${smtpHost}, Port: ${smtpPort}, User: ${smtpUser}, Pass length: ${smtpPass.length}`);
+
 const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || "smtp-relay.brevo.com",
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: Number(process.env.SMTP_PORT) === 465, // Port 587 ke liye false hota hai (STARTTLS)
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465, // Port 587 ke liye false hota hai (STARTTLS)
     auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, "") : "",
+        user: smtpUser,
+        pass: smtpPass,
     },
     tls: {
         rejectUnauthorized: false
-    }
+    },
+    connectionTimeout: 10000,  // 10 seconds to connect
+    greetingTimeout: 10000,    // 10 seconds for greeting
+    socketTimeout: 10000,      // 10 seconds for socket
 });
+
+// Startup pe SMTP connection test
+transporter.verify()
+    .then(() => console.log("✅ [SMTP] Connection verified successfully - ready to send emails"))
+    .catch((err) => console.error("❌ [SMTP] Connection verification FAILED:", err.message));
 
 
 // 2. Generic send email function
