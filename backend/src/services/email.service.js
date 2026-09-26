@@ -1,6 +1,8 @@
-import nodemailer from "nodemailer";
+// ============================================
+// OLD: Nodemailer + Mailtrap SMTP (commented out)
+// ============================================
+// import nodemailer from "nodemailer";
 
-// 1. Transporter create karein
 // const transporter = nodemailer.createTransport({
 //     host: process.env.SMTP_HOST || "sandbox.smtp.mailtrap.io",
 //     port: Number(process.env.SMTP_PORT) || 2525,
@@ -11,62 +13,71 @@ import nodemailer from "nodemailer";
 //     },
 // });
 
-// 
+// ============================================
+// OLD: Nodemailer + Gmail SMTP (commented out)
+// Render blocks SMTP ports (587/465) — Connection timeout error
+// ============================================
+// const transporter = nodemailer.createTransport({
+//     host: "smtp.gmail.com",
+//     port: Number(process.env.SMTP_PORT) || 587,
+//     secure: Number(process.env.SMTP_PORT) === 465,
+//     auth: {
+//         user: process.env.SMTP_USER,
+//         pass: process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, "") : "",
+//     },
+//     tls: { rejectUnauthorized: false },
+// });
 
+// ============================================
+// NEW: Brevo HTTP API — Email Service
+// (Render blocks SMTP ports, so using HTTPS API instead)
+// ============================================
 
-// 1. Transporter create karein (Brevo / SMTP compatible)
-const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
-const smtpPort = Number(process.env.SMTP_PORT) || 587;
-const smtpUser = process.env.SMTP_USER;
-const smtpPass = process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, "") : "";
+const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
 
-console.log(`📧 [SMTP Config] Host: ${smtpHost}, Port: ${smtpPort}, User: ${smtpUser}, Pass length: ${smtpPass.length}`);
-
-const transporter = nodemailer.createTransport({
-    host: smtpHost,
-    port: smtpPort,
-    secure: smtpPort === 465, // Port 587 ke liye false hota hai (STARTTLS)
-    auth: {
-        user: smtpUser,
-        pass: smtpPass,
-    },
-    tls: {
-        rejectUnauthorized: false
-    },
-    connectionTimeout: 10000,  // 10 seconds to connect
-    greetingTimeout: 10000,    // 10 seconds for greeting
-    socketTimeout: 10000,      // 10 seconds for socket
-});
-
-// Startup pe SMTP connection test
-transporter.verify()
-    .then(() => console.log("✅ [SMTP] Connection verified successfully - ready to send emails"))
-    .catch((err) => console.error("❌ [SMTP] Connection verification FAILED:", err.message));
-
-
-// 2. Generic send email function
+// Generic send email function via Brevo HTTP API
 export const sendEmail = async ({ to, subject, html }) => {
-    try {
-        const fromEmail = process.env.SMTP_FROM_EMAIL || "developerakky@gmail.com";
-        const fromName = process.env.SMTP_FROM_NAME || "CloudNotes";
-        
-        const mailOptions = {
-            from: `"${fromName}" <${fromEmail}>`,
-            to,
-            subject,
-            html,
-        };
+    const apiKey = process.env.BREVO_API_KEY;
+    const fromEmail = process.env.SMTP_FROM_EMAIL || "developerakky@gmail.com";
+    const fromName = process.env.SMTP_FROM_NAME || "CloudNotes";
 
-        const info = await transporter.sendMail(mailOptions);
-        console.log(`✅ Email sent successfully to ${to}, messageId: ${info.messageId}`);
-        return info;
+    if (!apiKey) {
+        console.error("❌ BREVO_API_KEY is not set in environment variables!");
+        throw new Error("Email service not configured");
+    }
+
+    try {
+        const response = await fetch(BREVO_API_URL, {
+            method: "POST",
+            headers: {
+                "accept": "application/json",
+                "api-key": apiKey,
+                "content-type": "application/json",
+            },
+            body: JSON.stringify({
+                sender: { name: fromName, email: fromEmail },
+                to: [{ email: to }],
+                subject: subject,
+                htmlContent: html,
+            }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error(`❌ Brevo API error (${response.status}):`, JSON.stringify(data));
+            throw new Error(data.message || "Email could not be sent");
+        }
+
+        console.log(`✅ Email sent successfully to ${to}, messageId: ${data.messageId}`);
+        return data;
     } catch (error) {
-        console.error("❌ Error sending email:", error);
+        console.error("❌ Error sending email:", error.message || error);
         throw new Error("Email could not be sent");
     }
 };
 
-// 3. Email Verification Template
+// Email Verification Template
 export const sendVerificationEmail = async (email, username, verificationToken) => {
     const verificationUrl = `${process.env.CLIENT_URL}/verify-email?token=${verificationToken}`;
 
@@ -91,7 +102,7 @@ export const sendVerificationEmail = async (email, username, verificationToken) 
     });
 };
 
-// 4. Password Reset Email Template
+// Password Reset Email Template
 export const sendPasswordResetEmail = async (email, username, resetToken) => {
     const resetUrl = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
 
@@ -116,7 +127,7 @@ export const sendPasswordResetEmail = async (email, username, resetToken) => {
     });
 };
 
-// 5. Welcome Email Template
+// Welcome Email Template
 export const sendWelcomeEmail = async (email, username) => {
     const dashboardUrl = `${process.env.CLIENT_URL}/`;
 
