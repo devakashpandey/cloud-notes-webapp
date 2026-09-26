@@ -14,9 +14,9 @@ import nodemailer from "nodemailer";
 // 
 
 
-// 1. Transporter create karein (Port 587 - Render compatible)
+// 1. Transporter create karein (Brevo / SMTP compatible)
 const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
+    host: process.env.SMTP_HOST || "smtp-relay.brevo.com",
     port: Number(process.env.SMTP_PORT) || 587,
     secure: Number(process.env.SMTP_PORT) === 465, // Port 587 ke liye false hota hai (STARTTLS)
     auth: {
@@ -32,17 +32,21 @@ const transporter = nodemailer.createTransport({
 // 2. Generic send email function
 export const sendEmail = async ({ to, subject, html }) => {
     try {
+        const fromEmail = process.env.SMTP_FROM_EMAIL || "developerakky@gmail.com";
+        const fromName = process.env.SMTP_FROM_NAME || "CloudNotes";
+        
         const mailOptions = {
-            from: `"CloudNotes" <${process.env.SMTP_USER}>`,
+            from: `"${fromName}" <${fromEmail}>`,
             to,
             subject,
             html,
         };
 
         const info = await transporter.sendMail(mailOptions);
+        console.log(`✅ Email sent successfully to ${to}, messageId: ${info.messageId}`);
         return info;
     } catch (error) {
-        console.error("Error sending email:", error);
+        console.error("❌ Error sending email:", error);
         throw new Error("Email could not be sent");
     }
 };
